@@ -1,0 +1,8 @@
+{
+  "name": "celebration-event-planner",
+  "version": "1.0.0",
+  "description": "GenAI-powered planner for weddings, birthdays and community events: budgets, timelines, vendor checklists and ideas.",
+  "type": "module",
+  "scripts": { "start": "node server.mjs", "test": "node --test" },
+  "license": "MIT"
+}
