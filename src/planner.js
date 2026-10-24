@@ -19,6 +19,14 @@ export const MAX_THEME = 60;
 const LARGE_EVENT_GUESTS = 150;
 const VERY_LARGE_EVENT_GUESTS = 500;
 
+const deepFreeze = (value) => {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+};
+
 /** Readiness-score weights. Base 25 + best case (20 + 10 + 15 + 20 + 10) = 100. */
 const SCORE = Object.freeze({
   base: 25,
@@ -33,7 +41,7 @@ const SCORE = Object.freeze({
   urgentDays: 30,
 });
 
-export const EVENT_TYPES = Object.freeze({
+export const EVENT_TYPES = deepFreeze({
   wedding: {
     label: 'Wedding',
     split: { Venue: 30, Catering: 30, 'Photo & Video': 10, 'Attire & Beauty': 10, 'Decor & Flowers': 8, Music: 5, Contingency: 7 },
@@ -83,7 +91,9 @@ export function validateInput(raw, today) {
   const guests = Number(raw?.guests);
   if (!Number.isInteger(guests) || guests < 1 || guests > MAX_GUESTS) errors.guests = `Guests must be a whole number from 1 to ${MAX_GUESTS}.`;
   const budget = Number(raw?.budget);
-  if (!Number.isFinite(budget) || budget < 1 || budget > MAX_BUDGET) errors.budget = 'Enter a budget greater than 0.';
+  if (!Number.isFinite(budget) || budget < 1 || budget > MAX_BUDGET) {
+    errors.budget = `Enter a budget greater than 0 and no more than ${MAX_BUDGET}.`;
+  }
   const date = parseDate(raw?.date);
   const todayT = parseDate(today);
   if (date === null) errors.date = 'Enter a valid date.';

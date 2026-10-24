@@ -130,3 +130,10 @@ test('API key field is a password input that is never autofilled', () => {
   assert.equal(attr(tag, 'type'), 'password');
   assert.equal(attr(tag, 'autocomplete'), 'off');
 });
+
+test('numeric controls expose the same limits enforced by the planner', () => {
+  const guests = tags('input').find((tag) => attr(tag, 'id') === 'guests');
+  const budget = tags('input').find((tag) => attr(tag, 'id') === 'budget');
+  assert.equal(attr(guests, 'max'), '5000');
+  assert.equal(attr(budget, 'max'), '1000000000');
+});

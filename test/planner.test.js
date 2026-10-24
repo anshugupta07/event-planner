@@ -41,6 +41,9 @@ test('validateInput enforces boundaries', () => {
   assert.equal(valid({ guests: '1' }).ok, true);
   assert.equal(valid({ guests: String(MAX_GUESTS) }).ok, true);
   assert.equal(valid({ guests: String(MAX_GUESTS + 1) }).ok, false);
+  assert.equal(valid({ budget: '1' }).ok, true);
+  assert.equal(valid({ budget: '1000000000' }).ok, true);
+  assert.equal(valid({ budget: '1000000001' }).errors.budget, 'Enter a budget greater than 0 and no more than 1000000000.');
   assert.equal(valid({ theme: 'a'.repeat(MAX_THEME) }).ok, true);
   assert.equal(valid({ date: TODAY }).ok, true, 'today is allowed');
   assert.equal(valid({ date: '2026-10-20' }).errors.date, 'Date cannot be in the past.');
@@ -60,6 +63,26 @@ test('every event type budget split totals 100% and has tasks, vendors and ideas
     assert.ok(cfg.tasks.length && cfg.vendors.length && cfg.ideas.length, name);
     assert.equal(cfg.tasks.at(-1)[0], 0, `${name} ends on event day`);
   }
+});
+
+test('every event type produces a complete, internally consistent plan', () => {
+  for (const type of Object.keys(EVENT_TYPES)) {
+    const input = { type, guests: 50, budget: 100000, date: '2027-06-01', theme: 'Garden' };
+    const plan = buildPlan(input, TODAY);
+    assert.equal(plan.budget.reduce((sum, row) => sum + row.amount, 0), input.budget, type);
+    assert.equal(plan.timeline.at(-1).due, input.date, type);
+    assert.equal(plan.checklist.every((item) => item.done === false), true, type);
+    assert.ok(plan.ideas.length >= EVENT_TYPES[type].ideas.length, type);
+    assert.ok(plan.evaluation.score >= 0 && plan.evaluation.score <= 100, type);
+  }
+});
+
+test('event configuration is immutable at every level', () => {
+  assert.equal(Object.isFrozen(EVENT_TYPES), true);
+  assert.equal(Object.isFrozen(EVENT_TYPES.wedding), true);
+  assert.equal(Object.isFrozen(EVENT_TYPES.wedding.split), true);
+  assert.equal(Object.isFrozen(EVENT_TYPES.wedding.tasks), true);
+  assert.equal(Object.isFrozen(EVENT_TYPES.wedding.tasks[0]), true);
 });
 
 test('allocateBudget sums exactly to the total and never goes negative', () => {
@@ -150,6 +173,17 @@ test('evaluatePlan mid-range budget earns points without a warning', () => {
   const mid = evaluatePlan({ type: 'birthday', guests: 100, budget: 60000, date: '2027-06-01', theme: 'x' }, TODAY);
   assert.equal(mid.score, 95);
   assert.ok(!mid.reasons.some((r) => r.includes('budget')));
+});
+
+test('evaluatePlan explains each independent readiness weakness', () => {
+  const noTheme = evaluatePlan({ type: 'birthday', guests: 10, budget: 100000, date: '2027-06-01', theme: '' }, TODAY);
+  assert.ok(noTheme.reasons.some((reason) => reason.includes('theme')));
+
+  const lowBudget = evaluatePlan({ type: 'birthday', guests: 100, budget: 100, date: '2027-06-01', theme: 'x' }, TODAY);
+  assert.ok(lowBudget.reasons.some((reason) => reason.includes('budget per guest')));
+
+  const largeEvent = evaluatePlan({ type: 'birthday', guests: 501, budget: 100000, date: '2027-06-01', theme: 'x' }, TODAY);
+  assert.ok(largeEvent.reasons.some((reason) => reason.includes('Large events')));
 });
 
 test('evaluatePlan counts one late task as partial credit', () => {

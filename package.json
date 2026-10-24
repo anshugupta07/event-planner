@@ -9,8 +9,9 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test test/*.test.js",
-    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude=test/** --test-coverage-exclude=eslint.config.js --test-coverage-lines=95 --test-coverage-branches=85 --test-coverage-functions=90 test/*.test.js",
-    "lint": "eslint ."
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude=test/** --test-coverage-exclude=eslint.config.js --test-coverage-lines=97 --test-coverage-branches=90 --test-coverage-functions=95 test/*.test.js",
+    "lint": "eslint .",
+    "verify": "npm run lint && npm run test:coverage"
   },
   "devDependencies": {
     "eslint": "^9.0.0"
