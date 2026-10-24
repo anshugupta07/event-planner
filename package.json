@@ -1,8 +1,19 @@
 {
   "name": "celebration-event-planner",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GenAI-powered planner for weddings, birthdays and community events: budgets, timelines, vendor checklists and ideas.",
   "type": "module",
-  "scripts": { "start": "node server.mjs", "test": "node --test" },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.js",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude=test/** --test-coverage-exclude=eslint.config.js --test-coverage-lines=95 --test-coverage-branches=85 --test-coverage-functions=90 test/*.test.js",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
+  },
   "license": "MIT"
 }

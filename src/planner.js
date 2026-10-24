@@ -1,8 +1,37 @@
 // Pure planning logic: no DOM, no network. Fully unit-tested.
+
+/**
+ * @typedef {'wedding' | 'birthday' | 'community'} EventType
+ * @typedef {{ type: EventType, guests: number, budget: number, date: string, theme: string }} PlanInput
+ * @typedef {{ category: string, percent: number, amount: number }} BudgetRow
+ * @typedef {{ task: string, due: string, late: boolean }} TimelineItem
+ * @typedef {{ label: string, done: boolean }} ChecklistItem
+ * @typedef {{ score: number, daysToEvent: number, lateTasks: number, reasons: string[] }} Evaluation
+ * @typedef {{ input: PlanInput, perGuest: number, budget: BudgetRow[], timeline: TimelineItem[],
+ *   checklist: ChecklistItem[], ideas: string[], evaluation: Evaluation }} Plan
+ */
+
 const DAY_MS = 86_400_000;
-const MAX_GUESTS = 5000;
-const MAX_BUDGET = 1_000_000_000;
-const MAX_THEME = 60;
+const WEEK_DAYS = 7;
+export const MAX_GUESTS = 5000;
+export const MAX_BUDGET = 1_000_000_000;
+export const MAX_THEME = 60;
+const LARGE_EVENT_GUESTS = 150;
+const VERY_LARGE_EVENT_GUESTS = 500;
+
+/** Readiness-score weights. Base 25 + best case (20 + 10 + 15 + 20 + 10) = 100. */
+const SCORE = Object.freeze({
+  base: 25,
+  lead: [[90, 20], [30, 15], [14, 10]], // [minimum days to event, points]
+  leadFallback: 5,
+  theme: 10,
+  perGuestBudget: [[1000, 15], [500, 10]], // [minimum budget per guest, points]
+  noLateTasks: 20,
+  fewLateTasks: 10,
+  fewLateTasksMax: 2,
+  manageableSize: 10,
+  urgentDays: 30,
+});
 
 export const EVENT_TYPES = Object.freeze({
   wedding: {
@@ -28,7 +57,11 @@ export const EVENT_TYPES = Object.freeze({
   },
 });
 
-/** Parse a strict YYYY-MM-DD string to a UTC timestamp, or null if invalid. */
+/**
+ * Parse a strict YYYY-MM-DD string to a UTC timestamp.
+ * @param {unknown} value
+ * @returns {number | null} null when the value is not a real calendar date
+ */
 export function parseDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const t = Date.parse(`${value}T00:00:00Z`);
@@ -37,7 +70,12 @@ export function parseDate(value) {
 
 const toIso = (t) => new Date(t).toISOString().slice(0, 10);
 
-/** Validate raw form values. Returns { ok, errors, value }. */
+/**
+ * Validate raw form values.
+ * @param {Record<string, unknown> | undefined} raw form values as strings
+ * @param {string} today current date as YYYY-MM-DD
+ * @returns {{ ok: boolean, errors: Record<string, string>, value: PlanInput | null }}
+ */
 export function validateInput(raw, today) {
   const errors = {};
   const type = String(raw?.type ?? '');
@@ -56,7 +94,12 @@ export function validateInput(raw, today) {
   return { ok, errors, value: ok ? { type, guests, budget: Math.round(budget), date: toIso(date), theme } : null };
 }
 
-/** Split a total budget by percentage; amounts are whole numbers summing exactly to total. */
+/**
+ * Split a total budget by percentage; amounts are whole numbers summing exactly to the total.
+ * @param {EventType} type
+ * @param {number} total
+ * @returns {BudgetRow[]}
+ */
 export function allocateBudget(type, total) {
   const entries = Object.entries(EVENT_TYPES[type].split);
   const rows = entries.map(([category, percent]) => ({ category, percent, amount: Math.floor((total * percent) / 100) }));
@@ -64,59 +107,86 @@ export function allocateBudget(type, total) {
   return rows;
 }
 
-/** Dated task list; tasks already overdue are moved to today and flagged. */
+/**
+ * Dated task list; tasks already overdue are moved to today and flagged.
+ * @param {EventType} type
+ * @param {string} eventDate YYYY-MM-DD
+ * @param {string} today YYYY-MM-DD
+ * @returns {TimelineItem[]}
+ */
 export function buildTimeline(type, eventDate, today) {
   const event = parseDate(eventDate);
   const now = parseDate(today);
   return EVENT_TYPES[type].tasks
     .map(([weeks, task]) => {
-      const due = event - weeks * 7 * DAY_MS;
+      const due = event - weeks * WEEK_DAYS * DAY_MS;
       return { task, due: toIso(Math.max(due, now)), late: due < now };
     })
     .sort((a, b) => a.due.localeCompare(b.due));
 }
 
+/**
+ * Vendor checklist that scales with guest count.
+ * @param {EventType} type
+ * @param {number} guests
+ * @returns {ChecklistItem[]}
+ */
 export function buildChecklist(type, guests) {
   const items = [...EVENT_TYPES[type].vendors, `Confirm catering headcount of ${guests}`];
-  if (guests > 150) items.push('Arrange crowd management and extra seating');
+  if (guests > LARGE_EVENT_GUESTS) items.push('Arrange crowd management and extra seating');
   return items.map((label) => ({ label, done: false }));
 }
 
+/**
+ * Personalised ideas; the theme (if any) becomes the first idea.
+ * @param {EventType} type
+ * @param {string} theme
+ * @returns {string[]}
+ */
 export function buildIdeas(type, theme) {
   const base = EVENT_TYPES[type].ideas;
   return theme ? [`Build the whole look around the "${theme}" theme`, ...base] : [...base];
 }
 
-/** Score planning readiness from 0 to 100 with reasons users can act on. */
+/** Points for the first [threshold, points] pair whose threshold is met. */
+const pointsFor = (value, table) => table.find(([min]) => value >= min)?.[1];
+
+/**
+ * Score planning readiness from 0 to 100 with reasons users can act on.
+ * @param {PlanInput} input
+ * @param {string} today YYYY-MM-DD
+ * @returns {Evaluation}
+ */
 export function evaluatePlan(input, today) {
-  const timeline = buildTimeline(input.type, input.date, today);
-  const eventTime = parseDate(input.date);
-  const todayTime = parseDate(today);
-  const daysToEvent = Math.max(0, Math.round((eventTime - todayTime) / DAY_MS));
-  const lateTasks = timeline.filter((task) => task.late).length;
+  const lateTasks = buildTimeline(input.type, input.date, today).filter((task) => task.late).length;
+  const daysToEvent = Math.max(0, Math.round((parseDate(input.date) - parseDate(today)) / DAY_MS));
   const reasons = [];
-  let score = 25;
+  let score = SCORE.base + (pointsFor(daysToEvent, SCORE.lead) ?? SCORE.leadFallback);
 
-  if (daysToEvent >= 90) score += 20;
-  else if (daysToEvent >= 30) score += 15;
-  else if (daysToEvent >= 14) score += 10;
-  else score += 5;
-
-  if (input.theme) score += 10;
+  if (input.theme) score += SCORE.theme;
   else reasons.push('Add a theme to make design and vendor decisions easier.');
-  if (input.budget >= input.guests * 1000) score += 15;
-  else if (input.budget >= input.guests * 500) score += 10;
+
+  const budgetPoints = pointsFor(input.budget / input.guests, SCORE.perGuestBudget);
+  if (budgetPoints) score += budgetPoints;
   else reasons.push('Review the budget per guest and keep a contingency reserve.');
-  if (lateTasks === 0) score += 20;
-  else if (lateTasks <= 2) score += 10;
+
+  if (lateTasks === 0) score += SCORE.noLateTasks;
+  else if (lateTasks <= SCORE.fewLateTasksMax) score += SCORE.fewLateTasks;
   else reasons.push('Several timeline tasks are already due, so start them now.');
-  if (input.guests <= 500) score += 10;
+
+  if (input.guests <= VERY_LARGE_EVENT_GUESTS) score += SCORE.manageableSize;
   else reasons.push('Large events benefit from extra volunteer and crowd-management planning.');
 
-  if (daysToEvent < 30) reasons.push('The event is less than 30 days away; prioritise essential bookings.');
+  if (daysToEvent < SCORE.urgentDays) reasons.push('The event is less than 30 days away; prioritise essential bookings.');
   return { score: Math.min(100, score), daysToEvent, lateTasks, reasons };
 }
 
+/**
+ * Build the complete plan for validated input.
+ * @param {PlanInput} input
+ * @param {string} today YYYY-MM-DD
+ * @returns {Plan}
+ */
 export function buildPlan(input, today) {
   return {
     input,
@@ -127,4 +197,15 @@ export function buildPlan(input, today) {
     ideas: buildIdeas(input.type, input.theme),
     evaluation: evaluatePlan(input, today),
   };
+}
+
+/**
+ * Friendly headline for a readiness score.
+ * @param {number} score 0-100
+ * @returns {string}
+ */
+export function scoreTitle(score) {
+  if (score >= 80) return 'You are in great shape';
+  if (score >= 60) return 'A solid start';
+  return 'A few priorities need attention';
 }
