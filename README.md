@@ -12,9 +12,10 @@ A GenAI-powered planning assistant for **weddings, birthdays and community event
 ## Run
 ```bash
 npm start              # serves http://localhost:8080 (Node.js 20+, no runtime dependencies)
-npm test               # built-in Node test runner
+npm test               # built-in Node test runner (Node 20+)
 npm run test:coverage  # tests + coverage gate (needs Node 22+)
 npm install && npm run verify # lint + tests + coverage gate
+npm run lint:fix       # auto-fix lint issues
 ```
 Or deploy the folder to GitHub Pages as-is.
 
@@ -27,16 +28,16 @@ Or deploy the folder to GitHub Pages as-is.
 | `src/draft.js` | Draft persistence (storage is injected) |
 | `src/view.js` | DOM rendering (document is injected) |
 | `src/app.js` | Thin wiring between the form and the modules above |
-| `server.mjs` | Static server with an allowlist and security headers |
+| `server.mjs` | Static server with an allowlist, security headers, streaming via `pipeline` and a testable `startServer` |
 
 ## How it maps to the evaluation criteria
 | Criterion | What was done |
 |---|---|
 | Problem alignment | Covers weddings, birthdays, community events; budgets, timelines, vendor checklists, personalised ideas, GenAI |
-| Code quality | Small ES modules with one job each; pure logic separated from AI, DOM and server; JSDoc typedefs; named constants instead of magic numbers; immutable planner configuration; no globals; ESLint config; `.editorconfig`; CI workflow on Node 20 and 22 |
+| Code quality | Small ES modules with one job each; pure logic separated from AI, DOM and server; JSDoc typedefs; named constants instead of magic numbers; immutable planner configuration; no globals; ESLint with enforced limits (complexity ≤ 10, function length ≤ 40 lines, line length ≤ 120, max 4 params); readable multi-line data tables and markup; shared constants (no duplicates); `.editorconfig`; CI on Node 20 and 22 using `npm ci` |
 | Security | Strict CSP (no inline script, no `unsafe-*`); all output via `textContent`; strict input validation; AI replies sanitised; API key kept in memory, sent in a header, never stored; server serves an allowlist only (never `server.mjs`, tests or config) plus `nosniff`, `X-Frame-Options`, `Referrer-Policy`; path-traversal blocked |
 | Efficiency | No framework or build step; O(n) logic; 15 s request timeout; AI call is optional and never blocks the plan; `no-cache` revalidation |
-| Testing | 82 tests, 97%+ line coverage, 90%+ branch coverage and 95%+ function coverage enforced by `npm run test:coverage`: validation boundaries, budget invariants, every event type and score tier, mocked AI success/timeout/failure, DOM rendering, full form flow, real HTTP server tests (traversal, methods, headers) and automated accessibility checks |
+| Testing | 85 tests, ~99% line, ~96% branch and ~98% function coverage (gate: 97 / 90 / 95) by `npm run test:coverage`: validation boundaries, budget invariants, every event type and score tier, mocked AI success/timeout/failure, DOM rendering, full form flow, real HTTP server tests (traversal, methods, headers) and automated accessibility checks |
 | Accessibility | WCAG AA contrast **verified by tests** in light and dark mode; labelled fields, `fieldset`/`legend`, `aria-invalid` + `role="alert"` errors, live status region, focus moved to results, skip link, scoped table headers, 24 px+ targets, visible focus ring, dark mode, reduced motion, forced-colors, landmarks incl. footer |
 
 ## Notes

@@ -7,8 +7,10 @@
  * @typedef {{ task: string, due: string, late: boolean }} TimelineItem
  * @typedef {{ label: string, done: boolean }} ChecklistItem
  * @typedef {{ score: number, daysToEvent: number, lateTasks: number, reasons: string[] }} Evaluation
- * @typedef {{ input: PlanInput, perGuest: number, budget: BudgetRow[], timeline: TimelineItem[],
- *   checklist: ChecklistItem[], ideas: string[], evaluation: Evaluation }} Plan
+ * @typedef {{
+ *   input: PlanInput, perGuest: number, budget: BudgetRow[], timeline: TimelineItem[],
+ *   checklist: ChecklistItem[], ideas: string[], evaluation: Evaluation
+ * }} Plan
  */
 
 const DAY_MS = 86_400_000;
@@ -28,7 +30,7 @@ const deepFreeze = (value) => {
 };
 
 /** Readiness-score weights. Base 25 + best case (20 + 10 + 15 + 20 + 10) = 100. */
-const SCORE = Object.freeze({
+const SCORE = deepFreeze({
   base: 25,
   lead: [[90, 20], [30, 15], [14, 10]], // [minimum days to event, points]
   leadFallback: 5,
@@ -41,27 +43,104 @@ const SCORE = Object.freeze({
   urgentDays: 30,
 });
 
+/** Weeks-before-event / task pairs are written as [weeks, task]. */
 export const EVENT_TYPES = deepFreeze({
   wedding: {
     label: 'Wedding',
-    split: { Venue: 30, Catering: 30, 'Photo & Video': 10, 'Attire & Beauty': 10, 'Decor & Flowers': 8, Music: 5, Contingency: 7 },
-    tasks: [[52, 'Set date and total budget'], [48, 'Book venue'], [40, 'Book photographer and caterer'], [26, 'Send save-the-dates'], [16, 'Order attire and finalise decor'], [8, 'Send invitations and collect RSVPs'], [2, 'Confirm final headcount with vendors'], [0, 'Wedding day']],
-    vendors: ['Venue contract signed', 'Caterer tasting done', 'Photographer booked', 'Florist and decorator confirmed', 'DJ or band booked', 'Officiant or priest confirmed'],
-    ideas: ['Personalised welcome sign and seating story', 'Live music during the ceremony', 'Memory table honouring loved ones'],
+    split: {
+      Venue: 30,
+      Catering: 30,
+      'Photo & Video': 10,
+      'Attire & Beauty': 10,
+      'Decor & Flowers': 8,
+      Music: 5,
+      Contingency: 7,
+    },
+    tasks: [
+      [52, 'Set date and total budget'],
+      [48, 'Book venue'],
+      [40, 'Book photographer and caterer'],
+      [26, 'Send save-the-dates'],
+      [16, 'Order attire and finalise decor'],
+      [8, 'Send invitations and collect RSVPs'],
+      [2, 'Confirm final headcount with vendors'],
+      [0, 'Wedding day'],
+    ],
+    vendors: [
+      'Venue contract signed',
+      'Caterer tasting done',
+      'Photographer booked',
+      'Florist and decorator confirmed',
+      'DJ or band booked',
+      'Officiant or priest confirmed',
+    ],
+    ideas: [
+      'Personalised welcome sign and seating story',
+      'Live music during the ceremony',
+      'Memory table honouring loved ones',
+    ],
   },
   birthday: {
     label: 'Birthday',
-    split: { Venue: 25, 'Food & Cake': 35, Decor: 12, Entertainment: 15, 'Return Gifts': 6, Contingency: 7 },
-    tasks: [[8, 'Set date, budget and guest list'], [6, 'Book venue or plan home setup'], [4, 'Order cake and send invitations'], [2, 'Book entertainment and buy decor'], [1, 'Confirm RSVPs and finalise menu'], [0, 'Party day']],
-    vendors: ['Venue or home layout ready', 'Cake order confirmed', 'Caterer or menu finalised', 'Entertainer or games arranged', 'Decor and balloons purchased'],
-    ideas: ['Photo booth with themed props', 'Treasure hunt matching the theme', 'Video wishes from friends and family'],
+    split: {
+      Venue: 25,
+      'Food & Cake': 35,
+      Decor: 12,
+      Entertainment: 15,
+      'Return Gifts': 6,
+      Contingency: 7,
+    },
+    tasks: [
+      [8, 'Set date, budget and guest list'],
+      [6, 'Book venue or plan home setup'],
+      [4, 'Order cake and send invitations'],
+      [2, 'Book entertainment and buy decor'],
+      [1, 'Confirm RSVPs and finalise menu'],
+      [0, 'Party day'],
+    ],
+    vendors: [
+      'Venue or home layout ready',
+      'Cake order confirmed',
+      'Caterer or menu finalised',
+      'Entertainer or games arranged',
+      'Decor and balloons purchased',
+    ],
+    ideas: [
+      'Photo booth with themed props',
+      'Treasure hunt matching the theme',
+      'Video wishes from friends and family',
+    ],
   },
   community: {
     label: 'Community event',
-    split: { 'Venue & Permits': 25, 'Food & Water': 25, 'Sound & Stage': 15, 'Marketing & Printing': 10, 'Volunteers & Safety': 15, Contingency: 10 },
-    tasks: [[10, 'Define purpose, budget and permits'], [8, 'Book venue and recruit volunteers'], [5, 'Start publicity and sponsor outreach'], [2, 'Brief volunteers and confirm vendors'], [1, 'Run site check and safety walkthrough'], [0, 'Event day']],
-    vendors: ['Venue and permits approved', 'Sound system and stage booked', 'Food and water supplier confirmed', 'First-aid and safety plan ready', 'Volunteer roster shared'],
-    ideas: ['Local-artist showcase slot', 'Collect donations for a community cause', 'Feedback wall to plan the next event'],
+    split: {
+      'Venue & Permits': 25,
+      'Food & Water': 25,
+      'Sound & Stage': 15,
+      'Marketing & Printing': 10,
+      'Volunteers & Safety': 15,
+      Contingency: 10,
+    },
+    tasks: [
+      [10, 'Define purpose, budget and permits'],
+      [8, 'Book venue and recruit volunteers'],
+      [5, 'Start publicity and sponsor outreach'],
+      [2, 'Brief volunteers and confirm vendors'],
+      [1, 'Run site check and safety walkthrough'],
+      [0, 'Event day'],
+    ],
+    vendors: [
+      'Venue and permits approved',
+      'Sound system and stage booked',
+      'Food and water supplier confirmed',
+      'First-aid and safety plan ready',
+      'Volunteer roster shared',
+    ],
+    ideas: [
+      'Local-artist showcase slot',
+      'Collect donations for a community cause',
+      'Feedback wall to plan the next event',
+    ],
   },
 });
 
@@ -78,6 +157,31 @@ export function parseDate(value) {
 
 const toIso = (t) => new Date(t).toISOString().slice(0, 10);
 
+const isWholeNumberInRange = (n, min, max) => Number.isInteger(n) && n >= min && n <= max;
+
+/** Each checker returns an error message, or '' when the field is fine. */
+const FIELD_CHECKS = Object.freeze({
+  type: (raw) => (Object.hasOwn(EVENT_TYPES, String(raw?.type ?? '')) ? '' : 'Choose an event type.'),
+  guests: (raw) => (isWholeNumberInRange(Number(raw?.guests), 1, MAX_GUESTS)
+    ? ''
+    : `Guests must be a whole number from 1 to ${MAX_GUESTS}.`),
+  budget: (raw) => {
+    const budget = Number(raw?.budget);
+    return Number.isFinite(budget) && budget >= 1 && budget <= MAX_BUDGET
+      ? ''
+      : `Enter a budget greater than 0 and no more than ${MAX_BUDGET}.`;
+  },
+  date: (raw, today) => {
+    const date = parseDate(raw?.date);
+    if (date === null) return 'Enter a valid date.';
+    const todayT = parseDate(today);
+    return todayT !== null && date < todayT ? 'Date cannot be in the past.' : '';
+  },
+  theme: (raw) => (String(raw?.theme ?? '').trim().length > MAX_THEME
+    ? `Theme must be at most ${MAX_THEME} characters.`
+    : ''),
+});
+
 /**
  * Validate raw form values.
  * @param {Record<string, unknown> | undefined} raw form values as strings
@@ -86,22 +190,19 @@ const toIso = (t) => new Date(t).toISOString().slice(0, 10);
  */
 export function validateInput(raw, today) {
   const errors = {};
-  const type = String(raw?.type ?? '');
-  if (!Object.hasOwn(EVENT_TYPES, type)) errors.type = 'Choose an event type.';
-  const guests = Number(raw?.guests);
-  if (!Number.isInteger(guests) || guests < 1 || guests > MAX_GUESTS) errors.guests = `Guests must be a whole number from 1 to ${MAX_GUESTS}.`;
-  const budget = Number(raw?.budget);
-  if (!Number.isFinite(budget) || budget < 1 || budget > MAX_BUDGET) {
-    errors.budget = `Enter a budget greater than 0 and no more than ${MAX_BUDGET}.`;
+  for (const [field, check] of Object.entries(FIELD_CHECKS)) {
+    const message = check(raw, today);
+    if (message) errors[field] = message;
   }
-  const date = parseDate(raw?.date);
-  const todayT = parseDate(today);
-  if (date === null) errors.date = 'Enter a valid date.';
-  else if (todayT !== null && date < todayT) errors.date = 'Date cannot be in the past.';
-  const theme = String(raw?.theme ?? '').trim();
-  if (theme.length > MAX_THEME) errors.theme = `Theme must be at most ${MAX_THEME} characters.`;
-  const ok = Object.keys(errors).length === 0;
-  return { ok, errors, value: ok ? { type, guests, budget: Math.round(budget), date: toIso(date), theme } : null };
+  if (Object.keys(errors).length > 0) return { ok: false, errors, value: null };
+  const value = {
+    type: String(raw.type),
+    guests: Number(raw.guests),
+    budget: Math.round(Number(raw.budget)),
+    date: toIso(parseDate(raw.date)),
+    theme: String(raw.theme ?? '').trim(),
+  };
+  return { ok: true, errors, value };
 }
 
 /**
@@ -112,7 +213,11 @@ export function validateInput(raw, today) {
  */
 export function allocateBudget(type, total) {
   const entries = Object.entries(EVENT_TYPES[type].split);
-  const rows = entries.map(([category, percent]) => ({ category, percent, amount: Math.floor((total * percent) / 100) }));
+  const rows = entries.map(([category, percent]) => ({
+    category,
+    percent,
+    amount: Math.floor((total * percent) / 100),
+  }));
   rows[rows.length - 1].amount += total - rows.reduce((s, r) => s + r.amount, 0);
   return rows;
 }
@@ -169,7 +274,8 @@ const pointsFor = (value, table) => table.find(([min]) => value >= min)?.[1];
  */
 export function evaluatePlan(input, today) {
   const lateTasks = buildTimeline(input.type, input.date, today).filter((task) => task.late).length;
-  const daysToEvent = Math.max(0, Math.round((parseDate(input.date) - parseDate(today)) / DAY_MS));
+  const daysUntil = (parseDate(input.date) - parseDate(today)) / DAY_MS;
+  const daysToEvent = Math.max(0, Math.round(daysUntil));
   const reasons = [];
   let score = SCORE.base + (pointsFor(daysToEvent, SCORE.lead) ?? SCORE.leadFallback);
 

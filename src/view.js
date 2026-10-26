@@ -11,6 +11,8 @@ function el(doc, tag, text, className) {
 }
 
 const fill = (container, nodes) => container.replaceChildren(...nodes);
+const byId = (doc, id) => doc.getElementById(id);
+const moneyFormat = () => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
 
 /**
  * Show or clear the validation message and aria-invalid flag for every field.
@@ -19,39 +21,45 @@ const fill = (container, nodes) => container.replaceChildren(...nodes);
  */
 export function showErrors(doc, errors) {
   for (const field of FIELDS) {
-    doc.getElementById(`${field}-error`).textContent = errors[field] ?? '';
-    const input = doc.getElementById(field);
+    byId(doc, `${field}-error`).textContent = errors[field] ?? '';
+    const input = byId(doc, field);
     if (errors[field]) input.setAttribute('aria-invalid', 'true');
     else input.removeAttribute('aria-invalid');
   }
 }
 
-/**
- * Render the whole plan and reveal the results section.
- * @param {Document} doc
- * @param {import('./planner.js').Plan} plan
- */
-export function renderPlan(doc, plan) {
-  const $ = (id) => doc.getElementById(id);
-  const money = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
-  const { evaluation } = plan;
+function renderSummary(doc, plan, money) {
+  const { budget, guests } = plan.input;
+  byId(doc, 'summary').textContent =
+    `Budget ${money.format(budget)} for ${guests} guests (about ${money.format(plan.perGuest)} per guest).`;
+}
+
+function renderScore(doc, evaluation) {
   const plural = evaluation.lateTasks === 1 ? '' : 's';
+  byId(doc, 'plan-score').textContent = evaluation.score;
+  byId(doc, 'score-title').textContent = scoreTitle(evaluation.score);
+  byId(doc, 'score-detail').textContent =
+    `${evaluation.daysToEvent} days until the event · ${evaluation.lateTasks} timeline task${plural} behind`;
+  fill(byId(doc, 'score-reasons'), evaluation.reasons.map((reason) => el(doc, 'li', reason)));
+}
 
-  $('summary').textContent = `Budget ${money.format(plan.input.budget)} for ${plan.input.guests} guests (about ${money.format(plan.perGuest)} per guest).`;
-  $('plan-score').textContent = evaluation.score;
-  $('score-title').textContent = scoreTitle(evaluation.score);
-  $('score-detail').textContent = `${evaluation.daysToEvent} days until the event · ${evaluation.lateTasks} timeline task${plural} behind`;
-  fill($('score-reasons'), evaluation.reasons.map((reason) => el(doc, 'li', reason)));
-
-  fill($('budget-body'), plan.budget.map((row) => {
+function renderBudget(doc, rows, money) {
+  fill(byId(doc, 'budget-body'), rows.map((row) => {
     const tr = el(doc, 'tr');
     const th = el(doc, 'th', row.category);
     th.scope = 'row';
     tr.append(th, el(doc, 'td', `${row.percent}%`), el(doc, 'td', money.format(row.amount)));
     return tr;
   }));
-  fill($('timeline'), plan.timeline.map((t) => el(doc, 'li', `${t.due}: ${t.task}${t.late ? ' (start now, behind schedule)' : ''}`)));
-  fill($('checklist'), plan.checklist.map((item, i) => {
+}
+
+function renderTimeline(doc, timeline) {
+  const line = (t) => `${t.due}: ${t.task}${t.late ? ' (start now, behind schedule)' : ''}`;
+  fill(byId(doc, 'timeline'), timeline.map((t) => el(doc, 'li', line(t))));
+}
+
+function renderChecklist(doc, checklist) {
+  fill(byId(doc, 'checklist'), checklist.map((item, i) => {
     const li = el(doc, 'li');
     const box = el(doc, 'input');
     box.type = 'checkbox';
@@ -61,8 +69,22 @@ export function renderPlan(doc, plan) {
     li.append(box, label);
     return li;
   }));
-  fill($('ideas'), plan.ideas.map((idea) => el(doc, 'li', idea)));
-  $('results').hidden = false;
+}
+
+/**
+ * Render the whole plan and reveal the results section.
+ * @param {Document} doc
+ * @param {import('./planner.js').Plan} plan
+ */
+export function renderPlan(doc, plan) {
+  const money = moneyFormat();
+  renderSummary(doc, plan, money);
+  renderScore(doc, plan.evaluation);
+  renderBudget(doc, plan.budget, money);
+  renderTimeline(doc, plan.timeline);
+  renderChecklist(doc, plan.checklist);
+  fill(byId(doc, 'ideas'), plan.ideas.map((idea) => el(doc, 'li', idea)));
+  byId(doc, 'results').hidden = false;
 }
 
 /**
@@ -71,6 +93,6 @@ export function renderPlan(doc, plan) {
  * @returns {string} e.g. "3/5 complete"
  */
 export function progressText(doc) {
-  const complete = FIELDS.filter((field) => String(doc.getElementById(field).value).trim()).length;
+  const complete = FIELDS.filter((field) => String(byId(doc, field).value).trim()).length;
   return `${complete}/${FIELDS.length} complete`;
 }

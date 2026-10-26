@@ -1,7 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
-import { createAppServer, getFilePath } from '../server.mjs';
+import { createAppServer, getFilePath, handleServerError, startServer } from '../server.mjs';
 
 let server;
 let port;
@@ -84,4 +84,40 @@ test('getFilePath allowlist', () => {
   assert.equal(getFilePath('/server.mjs'), null);
   assert.equal(getFilePath('/src/notes.txt'), null);
   assert.equal(getFilePath('/test/helpers/fake-dom.js'), null);
+});
+
+test('returns 500 when the file system fails unexpectedly', async () => {
+  const failing = createAppServer({ stat: async () => { throw Object.assign(new Error('denied'), { code: 'EACCES' }); } });
+  await new Promise((resolve) => failing.listen(0, '127.0.0.1', resolve));
+  try {
+    const { status } = await new Promise((resolve, reject) => {
+      request({ host: '127.0.0.1', port: failing.address().port, path: '/' }, (res) => {
+        res.resume();
+        res.on('end', () => resolve({ status: res.statusCode }));
+      }).on('error', reject).end();
+    });
+    assert.equal(status, 500);
+  } finally {
+    await new Promise((resolve) => failing.close(resolve));
+  }
+});
+
+test('handleServerError explains a busy port and rethrows anything else', () => {
+  const messages = [];
+  const logger = { error: (message) => messages.push(message) };
+  assert.equal(handleServerError({ code: 'EADDRINUSE' }, 8080, logger), 1);
+  assert.match(messages[0], /Port 8080 is already in use/);
+  const unexpected = Object.assign(new Error('boom'), { code: 'EACCES' });
+  assert.throws(() => handleServerError(unexpected, 80, logger), /boom/);
+});
+
+test('startServer listens and logs the address', async () => {
+  const lines = [];
+  const started = startServer(0, { log: (line) => lines.push(line), error() {} });
+  await new Promise((resolve) => started.once('listening', resolve));
+  try {
+    assert.match(lines[0], /^Event planner running at http:\/\/localhost:\d+$/);
+  } finally {
+    await new Promise((resolve) => started.close(resolve));
+  }
 });

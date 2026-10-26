@@ -18,16 +18,21 @@ function todayIso() {
 /** The most recently generated plan; module-scoped instead of a window global. */
 let currentPlan = null;
 
+/** Refresh the "n/5 complete" indicator. */
 function updateProgress() {
   $('form-progress').textContent = progressText(document);
 }
 
+/** Autosave the draft (never the API key) and report whether it worked. */
 function onDraftInput() {
   const saved = saveDraft(localStorage, Object.fromEntries(new FormData($('planner-form'))));
-  $('draft-status').textContent = saved ? 'Draft saved automatically.' : 'Draft could not be saved in this browser.';
+  $('draft-status').textContent = saved
+    ? 'Draft saved automatically.'
+    : 'Draft could not be saved in this browser.';
   updateProgress();
 }
 
+/** Fill the form from a previously saved draft, if one exists. */
 function restoreDraft() {
   const draft = loadDraft(localStorage);
   if (draft) {
@@ -37,6 +42,7 @@ function restoreDraft() {
   updateProgress();
 }
 
+/** Download the current plan as a plain-text file. */
 function downloadPlan() {
   if (!currentPlan) return;
   const link = document.createElement('a');
@@ -46,6 +52,31 @@ function downloadPlan() {
   URL.revokeObjectURL(link.href);
 }
 
+/** Report a failed validation and send keyboard focus to the first bad field. */
+function reportInvalid() {
+  setStatus('Please fix the highlighted fields.');
+  document.querySelector('[aria-invalid="true"]')?.focus();
+}
+
+/**
+ * Optionally enrich the plan with AI ideas. Failure never affects the plan itself.
+ * @param {string} apiKey in-memory only, never stored
+ * @param {import('./planner.js').PlanInput} input
+ */
+async function showAiIdeas(apiKey, input) {
+  $('ai-ideas').textContent = '';
+  if (!apiKey) return;
+  setStatus('Asking AI for extra ideas...');
+  try {
+    $('ai-ideas').textContent = await requestIdeas({ apiKey, input });
+    setStatus('Plan ready with AI ideas.');
+  } catch {
+    $('ai-ideas').textContent = 'AI ideas are unavailable right now. Your plan above is still complete.';
+    setStatus('Plan ready (AI unavailable).');
+  }
+}
+
+/** @param {SubmitEvent} event */
 async function onSubmit(event) {
   event.preventDefault();
   const today = todayIso();
@@ -53,25 +84,14 @@ async function onSubmit(event) {
   const { ok, errors, value } = validateInput(data, today);
   showErrors(document, errors);
   if (!ok) {
-    setStatus('Please fix the highlighted fields.');
-    document.querySelector('[aria-invalid="true"]')?.focus();
+    reportInvalid();
     return;
   }
   currentPlan = buildPlan(value, today);
   renderPlan(document, currentPlan);
   $('results-title').focus();
   setStatus('Plan ready.');
-  $('ai-ideas').textContent = '';
-  const apiKey = String(data.apikey ?? '').trim(); // in memory only, never stored
-  if (!apiKey) return;
-  setStatus('Asking AI for extra ideas...');
-  try {
-    $('ai-ideas').textContent = await requestIdeas({ apiKey, input: value });
-    setStatus('Plan ready with AI ideas.');
-  } catch {
-    $('ai-ideas').textContent = 'AI ideas are unavailable right now. Your plan above is still complete.';
-    setStatus('Plan ready (AI unavailable).');
-  }
+  await showAiIdeas(String(data.apikey ?? '').trim(), value);
 }
 
 for (const field of FIELDS) $(field).addEventListener('input', onDraftInput);
