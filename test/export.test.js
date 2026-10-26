@@ -4,7 +4,14 @@ import { buildPlan, validateInput } from '../src/planner.js';
 import { formatPlanText } from '../src/export.js';
 
 const TODAY = '2026-10-21';
-const plan = buildPlan(validateInput({ type: 'wedding', guests: '120', budget: '500000', date: '2026-12-01', theme: 'Rustic' }, TODAY).value, TODAY);
+const makePlan = (input) => {
+  const result = validateInput(input, TODAY);
+  assert.equal(result.ok, true);
+  return buildPlan(result.value, TODAY);
+};
+const plan = makePlan({
+  type: 'wedding', guests: '120', budget: '500000', date: '2026-12-01', theme: 'Rustic',
+});
 
 test('formatPlanText contains every section in order', () => {
   const text = formatPlanText(plan);
@@ -24,6 +31,6 @@ test('formatPlanText reports facts accurately', () => {
 });
 
 test('formatPlanText omits the late marker when nothing is late', () => {
-  const calm = buildPlan(validateInput({ type: 'birthday', guests: '10', budget: '5000', date: '2027-06-01', theme: '' }, TODAY).value, TODAY);
+  const calm = makePlan({ type: 'birthday', guests: '10', budget: '5000', date: '2027-06-01', theme: '' });
   assert.ok(!formatPlanText(calm).includes('behind schedule'));
 });

@@ -1,5 +1,13 @@
 /** Plain-text export of a plan, kept pure so it can be unit-tested. */
 
+const LATE_MARKER = ' (behind schedule)';
+
+const formatBudget = (rows) => rows.map((row) => `${row.category}: ${row.percent}% (${row.amount})`);
+const formatTimeline = (tasks) => tasks.map((task) => (
+  `${task.due}: ${task.task}${task.late ? LATE_MARKER : ''}`
+));
+const formatList = (items) => items.map((item) => `- ${item}`);
+
 /**
  * @param {import('./planner.js').Plan} plan
  * @returns {string}
@@ -12,15 +20,15 @@ export function formatPlanText(plan) {
     `Readiness score: ${evaluation.score}/100`,
     '',
     'BUDGET',
-    ...plan.budget.map((row) => `${row.category}: ${row.percent}% (${row.amount})`),
+    ...formatBudget(plan.budget),
     '',
     'TIMELINE',
-    ...plan.timeline.map((task) => `${task.due}: ${task.task}${task.late ? ' (behind schedule)' : ''}`),
+    ...formatTimeline(plan.timeline),
     '',
     'VENDOR CHECKLIST',
-    ...plan.checklist.map((item) => `- ${item.label}`),
+    ...formatList(plan.checklist.map((item) => item.label)),
     '',
     'IDEAS',
-    ...plan.ideas.map((idea) => `- ${idea}`),
+    ...formatList(plan.ideas),
   ].join('\n');
 }
